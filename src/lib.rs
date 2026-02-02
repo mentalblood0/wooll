@@ -33,7 +33,10 @@ impl Text {
                 .with_context(|| "Can not compile regular expression for text validation")
                 .unwrap()
         });
-        if sentence_regex.is_match(&self.0).with_context(|| "Regex matching failed")? {
+        if sentence_regex
+            .is_match(&self.0)
+            .with_context(|| "Regex matching failed")?
+        {
             Ok(())
         } else {
             Err(anyhow!(
@@ -55,11 +58,14 @@ impl RelationKind {
                 .with_context(|| "Can not compile regular expression for relation kind validation")
                 .unwrap()
         });
-        if sentence_regex.is_match(&self.0).with_context(|| "Regex matching failed")? {
+        if sentence_regex
+            .is_match(&self.0)
+            .with_context(|| "Regex matching failed")?
+        {
             Ok(())
         } else {
             Err(anyhow!(
-                "Relation kind must contain only English words with no punctuation"
+                "Relation kind must be an English words sequence without punctuation"
             ))
         }
     }
@@ -70,6 +76,12 @@ pub struct Relation {
     pub from: ObjectId,
     pub to: ObjectId,
     pub kind: RelationKind,
+}
+
+impl Relation {
+    pub fn validate(&self) -> Result<()> {
+        self.kind.validate()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq)]
@@ -84,6 +96,13 @@ impl Content {
             value: xxhash_rust::xxh3::xxh3_128(&bincode::encode_to_vec(self, bincode::config::standard()).with_context(|| format!("Can not binary encode Content {self:?} in order to compute it's ObjectId as it's binary representation hash"))?).to_be_bytes(),
         })
     }
+
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            Content::Text(text) => text.validate(),
+            Content::Relation(relation) => relation.validate(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -93,12 +112,15 @@ static TAG_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
 
 impl Tag {
     pub fn validate(&self) -> Result<()> {
-        let re = TAG_REGEX.get_or_init(|| {
+        let tag_regex = TAG_REGEX.get_or_init(|| {
             Regex::new(r"^\w+$")
                 .with_context(|| "Can not compile regular expression for tag validation")
                 .unwrap()
         });
-        if re.is_match(&self.0).with_context(|| "Regex matching failed")? {
+        if tag_regex
+            .is_match(&self.0)
+            .with_context(|| "Regex matching failed")?
+        {
             Ok(())
         } else {
             Err(anyhow!("Tag must be a word symbols sequence"))
@@ -117,6 +139,14 @@ pub struct Thesis {
 impl Thesis {
     pub fn id(&self) -> Result<ObjectId> {
         self.content.id()
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        self.content.validate()?;
+        for tag in self.tags.iter() {
+            tag.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -266,7 +296,7 @@ mod tests {
 
     fn random_relation_kind(rng: &mut WyRand) -> RelationKind {
         const LETTERS: &str = "abcdefghijklmnopqrstuvwxyz";
-        let word_count = rng.generate_range(3..=10);
+        let word_count = rng.generate_range(1..=5);
         let letters: Vec<char> = LETTERS.chars().collect();
         let words: Vec<String> = (0..word_count)
             .map(|_| {
@@ -285,7 +315,6 @@ mod tests {
         let mut rng = WyRand::new_seed(0);
 
         random_text(&mut rng).validate().unwrap();
-        random_relation_kind(&mut rng).validate().unwrap();
 
         sweater
             .lock_all_and_write(|transaction| {
@@ -325,6 +354,7 @@ mod tests {
                                     },
                                     tags: vec![],
                                 };
+                            thesis.validate().unwrap();
                             transaction.insert_thesis(thesis.clone()).unwrap();
                             previously_added_theses.insert(thesis.id().unwrap(), thesis);
                         }
