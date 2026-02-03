@@ -284,7 +284,7 @@ impl WriteTransaction<'_, '_, '_, '_> {
                 for related_id in [from_id, to_id] {
                     if self
                         .chest_transaction
-                        .get(&related_id, path_segments!("content"))?
+                        .get(&related_id, &path_segments!("content"))?
                         .is_none()
                     {
                         return Err(anyhow!(
@@ -310,12 +310,12 @@ impl WriteTransaction<'_, '_, '_, '_> {
     pub fn tag_thesis(&mut self, thesis_id: &ObjectId, tag: Tag) -> Result<()> {
         if !self.chest_transaction.contains_element(
             thesis_id,
-            path_segments!("tags"),
+            &path_segments!("tags"),
             &serde_json::to_value(tag.clone())?.try_into()?,
         )? {
             self.chest_transaction.push(
                 thesis_id,
-                path_segments!("tags"),
+                &path_segments!("tags"),
                 serde_json::to_value(tag)?,
             )?;
         }
@@ -327,7 +327,7 @@ impl WriteTransaction<'_, '_, '_, '_> {
             .select(
                 &vec![(
                     IndexRecordType::Direct,
-                    path_segments!("mentioned").clone(),
+                    path_segments!("mentioned"),
                     serde_json::to_value(thesis_id)?.try_into()?,
                 )],
                 &vec![],
@@ -496,8 +496,8 @@ mod tests {
                                 transaction.where_mentioned(&thesis_id)?,
                                 thesis
                                     .mentions()?
-                                    .iter()
-                                    .map(|mention| mention.mentioned.clone())
+                                    .into_iter()
+                                    .map(|mention| mention.mentioned)
                                     .collect::<Vec<_>>()
                             );
                             previously_added_theses.insert(thesis_id, thesis);

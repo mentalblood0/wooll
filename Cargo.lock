@@ -1002,7 +1002,7 @@ dependencies = [
 [[package]]
 name = "trove"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/trove#bd89dd2b53b799c9630614df3f0fe988adbde7dd"
+source = "git+https://github.com/mentalblood0/trove#c879dcbf6a0db04f6d01658d9f022b654bcb9b9e"
 dependencies = [
  "anyhow",
  "base64",
