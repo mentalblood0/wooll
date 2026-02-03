@@ -277,7 +277,7 @@ impl WriteTransaction<'_, '_, '_, '_> {
     pub fn tag_thesis(&mut self, thesis_id: &ObjectId, tag: Tag) -> Result<()> {
         if !self.chest_transaction.contains_element(
             thesis_id,
-            path_segments!("content", "tags"),
+            path_segments!("tags"),
             &serde_json::to_value(tag.clone())?.try_into()?,
         )? {
             self.chest_transaction.push(
