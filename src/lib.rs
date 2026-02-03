@@ -168,6 +168,8 @@ impl Thesis {
                         inside: self_id.clone(),
                     });
                 }
+                result.sort_by_key(|mention| mention.mentioned.clone());
+                result.dedup_by_key(|mention| mention.mentioned.clone());
                 Ok(result)
             }
             Content::Relation(_) => Ok(vec![]),
