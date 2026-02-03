@@ -154,12 +154,12 @@ impl Thesis {
         match self.content {
             Content::Text(Text(ref text)) => {
                 let mention_regex = MENTION_REGEX.get_or_init(|| {
-            Regex::new(
-                r"@((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4}))[ ,$]",
-            )
-            .with_context(|| "Can not compile regular expression to search text for mentions")
-            .unwrap()
-        });
+                    Regex::new(r"@([A-Za-z0-9-_]{22})[ ,$]")
+                        .with_context(
+                            || "Can not compile regular expression to search text for mentions",
+                        )
+                        .unwrap()
+                });
                 let self_id = self.id()?;
                 let mut result = vec![];
                 for capture in mention_regex.captures_iter(text) {
@@ -261,6 +261,9 @@ impl WriteTransaction<'_, '_, '_, '_> {
     define_read_methods!();
 
     pub fn where_mentioned(&self, thesis_id: &ObjectId) -> Result<Vec<ObjectId>> {
+        for object in self.chest_transaction.objects()?.iterator() {
+            println!("object {object:?}");
+        }
         self.chest_transaction
             .select(
                 &vec![(
@@ -326,6 +329,7 @@ impl WriteTransaction<'_, '_, '_, '_> {
                 value: serde_json::to_value(thesis.clone())?,
             })?;
             for mention in thesis.mentions()? {
+                println!("insert {mention:?}");
                 self.chest_transaction.insert_with_id(Object {
                     id: mention.id()?,
                     value: serde_json::to_value(mention)?,
