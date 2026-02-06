@@ -14,17 +14,16 @@ use super::text::Text;
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Alias(String);
 
-static ALIAS_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-
 impl Alias {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validated(&self) -> Result<&Self> {
+        static ALIAS_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let sentence_regex = ALIAS_REGEX.get_or_init(|| {
             Regex::new(r#"^\S+$"#)
                 .with_context(|| "Can not compile regular expression for thesis alias validation")
                 .unwrap()
         });
         if sentence_regex.is_match(&self.0) {
-            Ok(())
+            Ok(self)
         } else {
             Err(anyhow!(
                 "Alias must be sequence of one or more non-whitespace characters, so {:?} does not seem to be text",
@@ -38,6 +37,19 @@ impl Alias {
 pub enum ThesisReference {
     Alias(Alias),
     ObjectId(ObjectId),
+}
+
+impl ThesisReference {
+    pub fn new(input: &str) -> Result<Self> {
+        if let Ok(alias) = Alias(input.to_string()).validated() {
+            Ok(Self::Alias(alias.to_owned()))
+        } else {
+            Ok(Self::ObjectId(serde_json::from_str(&format!(
+                "\"{}\"",
+                input
+            ))?))
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -128,8 +140,8 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
                 let alias_option = captures
                     .get(1)
                     .map(|alias_match| Alias(alias_match.as_str().to_string()));
-                if let Some(alias) = alias_option {
-                    alias.validate().with_context(|| {
+                if let Some(ref alias) = alias_option {
+                    alias.validated().with_context(|| {
                         format!(
                             "Can not parse first line {:?} in {}-nth paragraph {:?}",
                             lines[0],
@@ -145,9 +157,12 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
                     })),
                     ('+', 4) => Ok(Command::AddRelationThesis(AddRelationThesis {
                         alias: alias_option,
-                        from: (),
-                        to: (),
-                        kind: (),
+                        from: ThesisReference::new(lines[1])?,
+                        kind: RelationKind(lines[2].to_string()),
+                        to: ThesisReference::new(lines[3])?,
+                    })),
+                    ('-', 2) => Ok(Command::RemoveThesis(RemoveThesis {
+                        thesis_id: serde_json::from_str(&format!("\"{}\"", lines[1]))?,
                     })),
                     _ => Err(anyhow!(
                         "Unsupported operation character and lines count combination ({:?}, {}) in first line {:?} of {}-nth paragraph {:?}, supported combinations are ('+', 2) for adding text thesis, ('+', 4) for adding relation thesis, ('-', 2) for removing thesis, ('#', 3) for adding tag, ('^', 3) for removing tag",

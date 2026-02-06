@@ -18,10 +18,15 @@ impl Content {
         })
     }
 
-    pub fn validate(&self) -> Result<()> {
+    pub fn validated(&self) -> Result<&Self> {
         match self {
-            Content::Text(text) => text.validate(),
-            Content::Relation(relation) => relation.validate(),
+            Content::Text(text) => {
+                text.validated()?;
+            }
+            Content::Relation(relation) => {
+                relation.validated()?;
+            }
         }
+        Ok(self)
     }
 }

@@ -21,12 +21,12 @@ impl Thesis {
         self.content.id()
     }
 
-    pub fn validate(&self) -> Result<()> {
-        self.content.validate()?;
+    pub fn validated(&self) -> Result<&Self> {
+        self.content.validated()?;
         for tag in self.tags.iter() {
-            tag.validate()?;
+            tag.validated()?;
         }
-        Ok(())
+        Ok(self)
     }
 
     pub fn mentions(&self) -> Result<Vec<Mention>> {

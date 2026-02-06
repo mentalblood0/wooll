@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct Tag(pub String);
 
 impl Tag {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validated(&self) -> Result<&Self> {
         static TAG_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let tag_regex = TAG_REGEX.get_or_init(|| {
             Regex::new(r"^\w+$")
@@ -14,7 +14,7 @@ impl Tag {
                 .unwrap()
         });
         if tag_regex.is_match(&self.0) {
-            Ok(())
+            Ok(self)
         } else {
             Err(anyhow!(
                 "Tag must be a word symbols sequence, so {:?} does not seem to be tag",

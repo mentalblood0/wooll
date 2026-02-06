@@ -7,7 +7,7 @@ use trove::ObjectId;
 pub struct RelationKind(pub String);
 
 impl RelationKind {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validated(&self) -> Result<&Self> {
         static RELATION_KIND_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let sentence_regex = RELATION_KIND_REGEX.get_or_init(|| {
             Regex::new(r"^[\w\s]+$")
@@ -15,7 +15,7 @@ impl RelationKind {
                 .unwrap()
         });
         if sentence_regex.is_match(&self.0) {
-            Ok(())
+            Ok(self)
         } else {
             Err(anyhow!(
                 "Relation kind must be an English words sequence without punctuation, so {:?} does not seem to be relation kind",
@@ -33,7 +33,8 @@ pub struct Relation {
 }
 
 impl Relation {
-    pub fn validate(&self) -> Result<()> {
-        self.kind.validate()
+    pub fn validated(&self) -> Result<&Self> {
+        self.kind.validated()?;
+        Ok(self)
     }
 }

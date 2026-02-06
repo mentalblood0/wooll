@@ -9,6 +9,8 @@ mod text;
 mod thesis;
 mod write_transaction;
 
+use trove::PathSegment;
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -174,7 +176,7 @@ mod tests {
                                 }
                                 result
                             };
-                            thesis.validate().unwrap();
+                            thesis.validated().unwrap();
                             transaction.insert_thesis(thesis.clone()).unwrap();
                             let thesis_id = thesis.id().unwrap();
                             assert_eq!(
