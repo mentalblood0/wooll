@@ -7,9 +7,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use trove::ObjectId;
 
-use super::relation::RelationKind;
-use super::tag::Tag;
-use super::text::Text;
+use crate::relation::RelationKind;
+use crate::tag::Tag;
+use crate::text::Text;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Alias(String);
@@ -50,6 +50,16 @@ impl ThesisReference {
             ))?))
         }
     }
+
+    pub fn validated(&self) -> Result<&Self> {
+        match self {
+            ThesisReference::Alias(alias) => {
+                alias.validated()?;
+            }
+            ThesisReference::ObjectId(_) => {}
+        }
+        Ok(self)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -89,7 +99,35 @@ pub enum Command {
     AddRelationThesis(AddRelationThesis),
     AddTag(AddTag),
     RemoveThesis(RemoveThesis),
-    RemoveTag(RemoveThesis),
+    RemoveTag(RemoveTag),
+}
+
+impl Command {
+    pub fn validated(&self) -> Result<&Self> {
+        match self {
+            Command::AddTextThesis(add_text_thesis) => {
+                if let Some(ref alias) = add_text_thesis.alias {
+                    alias.validated()?;
+                }
+                add_text_thesis.text.validated()?;
+            }
+            Command::AddRelationThesis(add_relation_thesis) => {
+                if let Some(ref alias) = add_relation_thesis.alias {
+                    alias.validated()?;
+                }
+                add_relation_thesis.kind.validated()?;
+            }
+            Command::RemoveThesis(_) => {}
+            Command::AddTag(add_tag) => {
+                add_tag.thesis_reference.validated()?;
+                add_tag.tag.validated()?;
+            }
+            Command::RemoveTag(remove_tag) => {
+                remove_tag.tag.validated()?;
+            }
+        }
+        Ok(self)
+    }
 }
 
 static COMMANDS_SPLIT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
@@ -151,28 +189,48 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
                     })?;
                 }
                 Ok(Some(match (operation_char, lines.len()) {
-                    ('+', 2) => Ok(Command::AddTextThesis(AddTextThesis {
-                        alias: alias_option,
-                        text: Text(lines[1].to_string()),
-                    })),
-                    ('+', 4) => Ok(Command::AddRelationThesis(AddRelationThesis {
-                        alias: alias_option,
-                        from: ThesisReference::new(lines[1])?,
-                        kind: RelationKind(lines[2].to_string()),
-                        to: ThesisReference::new(lines[3])?,
-                    })),
-                    ('-', 2) => Ok(Command::RemoveThesis(RemoveThesis {
+                    ('+', 2) => {
+                        if let Some(ref alias) = alias_option {
+                            self.aliases.insert(alias.clone());
+                        }
+                        Command::AddTextThesis(AddTextThesis {
+                            alias: alias_option,
+                            text: Text(lines[1].to_string()),
+                        })
+                    }
+                    ('+', 4) => {
+                        if let Some(ref alias) = alias_option {
+                            self.aliases.insert(alias.clone());
+                        }
+                        Command::AddRelationThesis(AddRelationThesis {
+                            alias: alias_option,
+                            from: ThesisReference::new(lines[1])?,
+                            kind: RelationKind(lines[2].to_string()),
+                            to: ThesisReference::new(lines[3])?,
+                        })
+                    }
+                    ('-', 2) => Command::RemoveThesis(RemoveThesis {
                         thesis_id: serde_json::from_str(&format!("\"{}\"", lines[1]))?,
-                    })),
-                    _ => Err(anyhow!(
-                        "Unsupported operation character and lines count combination ({:?}, {}) in first line {:?} of {}-nth paragraph {:?}, supported combinations are ('+', 2) for adding text thesis, ('+', 4) for adding relation thesis, ('-', 2) for removing thesis, ('#', 3) for adding tag, ('^', 3) for removing tag",
-                        operation_char,
-                        lines.len(),
-                        lines[0],
-                        paragraph_index + 1,
-                        paragraph
-                    )),
-                }?))
+                    }),
+                    ('#', 3) => Command::AddTag(AddTag {
+                        thesis_reference: ThesisReference::new(lines[1])?,
+                        tag: Tag(lines[2].to_string()),
+                    }),
+                    ('^', 3) => Command::RemoveTag(RemoveTag {
+                        thesis_id: serde_json::from_str(&format!("\"{}\"", lines[1]))?,
+                        tag: Tag(lines[2].to_string()),
+                    }),
+                    _ => {
+                        return Err(anyhow!(
+                            "Unsupported operation character and lines count combination ({:?}, {}) in first line {:?} of {}-nth paragraph {:?}, supported combinations are ('+', 2) for adding text thesis, ('+', 4) for adding relation thesis, ('-', 2) for removing thesis, ('#', 3) for adding tag, ('^', 3) for removing tag",
+                            operation_char,
+                            lines.len(),
+                            lines[0],
+                            paragraph_index + 1,
+                            paragraph
+                        ));
+                    }
+                }.validated()?.to_owned()))
             } else {
                 Err(anyhow!(
                     "Can not parse first line {:?} in {}-nth paragraph {:?}",
