@@ -86,12 +86,6 @@ impl WriteTransaction<'_, '_, '_, '_> {
                 id: thesis_id,
                 value: serde_json::to_value(thesis.clone())?,
             })?;
-            for mention in thesis.mentions()? {
-                self.chest_transaction.insert_with_id(Object {
-                    id: mention.id()?,
-                    value: serde_json::to_value(mention)?,
-                })?;
-            }
             Ok(())
         }
     }

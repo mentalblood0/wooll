@@ -43,7 +43,7 @@ mod tests {
     fn random_text(
         rng: &mut WyRand,
         previously_added_theses: &BTreeMap<ObjectId, Thesis>,
-        transaction_for_aliases_resolving: &impl ReadTransactionMethods,
+        transaction_for_aliases_resolving: &dyn ReadTransactionMethods,
     ) -> Text {
         const ENGLISH_LETTERS: [&str; 26] = [
             "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q",

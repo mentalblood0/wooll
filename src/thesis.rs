@@ -4,7 +4,6 @@ use trove::ObjectId;
 
 use crate::alias::Alias;
 use crate::content::Content;
-use crate::mention::Mention;
 use crate::relation::Relation;
 use crate::tag::Tag;
 use crate::text::Text;

@@ -28,16 +28,18 @@ impl RawText {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, bincode::Encode, Eq)]
 pub struct Text {
+    #[serde(default)]
     pub raw_text_parts: Vec<RawText>,
+    #[serde(default)]
     pub references: Vec<ObjectId>,
 }
 
 impl Text {
     pub fn new(
         input: &str,
-        transaction_for_aliases_resolving: &impl ReadTransactionMethods,
+        transaction_for_aliases_resolving: &dyn ReadTransactionMethods,
     ) -> Result<Self> {
         static REFERENCE_IN_TEXT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let reference_in_text_regex = REFERENCE_IN_TEXT_REGEX.get_or_init(|| {
