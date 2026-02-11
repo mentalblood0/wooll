@@ -12,7 +12,6 @@ use crate::relation::{Relation, RelationKind};
 use crate::tag::Tag;
 use crate::text::Text;
 use crate::alias::Alias;
-use crate::reference::Reference;
 
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

@@ -1,9 +1,7 @@
 pub mod alias;
 pub mod commands;
 pub mod content;
-pub mod mention;
 pub mod read_transaction;
-pub mod reference;
 pub mod relation;
 pub mod sweater;
 pub mod tag;
@@ -22,6 +20,7 @@ mod tests {
     use trove::ObjectId;
 
     use crate::content::Content;
+    use crate::read_transaction::ReadTransactionMethods;
     use crate::relation::Relation;
     use crate::sweater::Sweater;
     use crate::tag::Tag;
@@ -41,7 +40,11 @@ mod tests {
         .unwrap()
     }
 
-    fn random_text(rng: &mut WyRand, previously_added_theses: &BTreeMap<ObjectId, Thesis>) -> Text {
+    fn random_text(
+        rng: &mut WyRand,
+        previously_added_theses: &BTreeMap<ObjectId, Thesis>,
+        transaction_for_aliases_resolving: &impl ReadTransactionMethods,
+    ) -> Text {
         const ENGLISH_LETTERS: [&str; 26] = [
             "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q",
             "r", "s", "t", "u", "v", "w", "x", "y", "z",
@@ -93,7 +96,7 @@ mod tests {
                 }
             }
         }
-        Text(result)
+        Text::new(&result, transaction_for_aliases_resolving).unwrap()
     }
 
     fn random_tag(rng: &mut WyRand) -> Tag {
@@ -120,7 +123,7 @@ mod tests {
                     rng.generate_range(1..=2)
                 };
                 match action_id {
-                    1 => Content::Text(random_text(rng, previously_added_theses)),
+                    1 => Content::Text(random_text(rng, previously_added_theses, transaction)),
                     2 => Content::Relation(Relation {
                         from: previously_added_theses
                             .keys()
@@ -186,10 +189,10 @@ mod tests {
                                 transaction.get_thesis(&thesis_id).unwrap().unwrap(),
                                 thesis
                             );
-                            for mention in thesis.mentions()? {
+                            for referenced_thesis_id in thesis.references() {
                                 assert!(
                                     transaction
-                                        .where_mentioned(&mention.mentioned)?
+                                        .where_mentioned(&referenced_thesis_id)?
                                         .contains(&thesis_id)
                                 );
                             }

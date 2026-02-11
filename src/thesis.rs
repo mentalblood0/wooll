@@ -34,7 +34,7 @@ impl Thesis {
         Ok(self)
     }
 
-    pub fn mentions(&self) -> Vec<ObjectId> {
+    pub fn references(&self) -> Vec<ObjectId> {
         match self.content {
             Content::Text(Text {
                 raw_text_parts: _,
