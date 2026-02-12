@@ -53,7 +53,7 @@ mod tests {
             "а", "б", "в", "г", "д", "е", "ё", "ж", "з", "и", "й", "к", "л", "м", "н", "о", "п",
             "р", "с", "т", "у", "ф", "х", "ц", "ч", "ш", "щ", "ъ", "ы", "ь", "э", "ю", "я",
         ];
-        const PUNCTUATION: &[&str] = &[", "];
+        const PUNCTUATION: &[&str] = &[", -'\""];
         let language = rng.generate_range(1..=2);
         let mut references_count = 0;
         let words: Vec<String> = (0..rng.generate_range(3..=10))
@@ -164,7 +164,7 @@ mod tests {
         sweater
             .lock_all_and_write(|transaction| {
                 let mut previously_added_theses: BTreeMap<ObjectId, Thesis> = BTreeMap::new();
-                for _ in 0..200 {
+                for _ in 0..1000 {
                     let action_id = if previously_added_theses.is_empty() {
                         1
                     } else {

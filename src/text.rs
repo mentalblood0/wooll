@@ -13,7 +13,7 @@ impl RawText {
     pub fn validated(&self) -> Result<&Self> {
         static RAW_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let sentence_regex = RAW_REGEX.get_or_init(|| {
-            Regex::new(r#"^(?:[\p{Script=Cyrillic}\p{Script=Latin}\s,-]+|@[A-Za-z0-9_-]{22})+$"#)
+            Regex::new(r#"^[\p{Script=Cyrillic}\p{Script=Latin}\s,\-"']+$"#)
                 .with_context(|| "Can not compile regular expression for text validation")
                 .unwrap()
         });
@@ -43,7 +43,7 @@ impl Text {
     ) -> Result<Self> {
         static REFERENCE_IN_TEXT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let reference_in_text_regex = REFERENCE_IN_TEXT_REGEX.get_or_init(|| {
-            Regex::new(r"@(:?([A-Za-z0-9-_]{22})|(\S+))(:?,| |$)")
+            Regex::new(r#"@(:?([A-Za-z0-9-_]{22})|(\S+))(:?\s|$)"#)
                 .with_context(|| "Can not compile regular expression to split text on raw text parts and references")
                 .unwrap()
         });
