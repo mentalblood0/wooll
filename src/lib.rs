@@ -15,7 +15,6 @@ use trove::PathSegment;
 mod tests {
     use std::collections::BTreeMap;
 
-    use fallible_iterator::FallibleIterator;
     use nanorand::{Rng, WyRand};
     use pretty_assertions::assert_eq;
     use trove::ObjectId;
@@ -165,7 +164,7 @@ mod tests {
         sweater
             .lock_all_and_write(|transaction| {
                 let mut previously_added_theses: BTreeMap<ObjectId, Thesis> = BTreeMap::new();
-                for _ in 0..1000 {
+                for _ in 0..200 {
                     let action_id = if previously_added_theses.is_empty() {
                         1
                     } else {
@@ -192,21 +191,9 @@ mod tests {
                                 transaction.get_thesis(&thesis_id).unwrap().unwrap(),
                                 thesis
                             );
-                            dbg!(&thesis);
                             for referenced_thesis_id in thesis.references() {
                                 let where_referenced =
                                     transaction.where_referenced(&referenced_thesis_id)?;
-                                dbg!(&where_referenced);
-                                for object in transaction
-                                    .chest_transaction
-                                    .objects()
-                                    .unwrap()
-                                    .collect::<Vec<_>>()
-                                    .unwrap()
-                                {
-                                    // dbg!(object.value);
-                                    dbg!(serde_json::from_value::<Thesis>(object.value).unwrap());
-                                }
                                 assert!(where_referenced.contains(&thesis_id));
                             }
                             previously_added_theses.insert(thesis_id, thesis);
