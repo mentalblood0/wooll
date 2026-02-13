@@ -5,7 +5,7 @@ use trove::ObjectId;
 use crate::relation::Relation;
 use crate::text::Text;
 
-#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Content {
     Text(Text),
     Relation(Relation),

@@ -29,7 +29,7 @@ impl RawText {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, bincode::Encode, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Text {
     #[serde(default)]
     pub raw_text_parts: Vec<RawText>,
