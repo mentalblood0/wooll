@@ -53,12 +53,12 @@ mod tests {
             "а", "б", "в", "г", "д", "е", "ё", "ж", "з", "и", "й", "к", "л", "м", "н", "о", "п",
             "р", "с", "т", "у", "ф", "х", "ц", "ч", "ш", "щ", "ъ", "ы", "ь", "э", "ю", "я",
         ];
-        const PUNCTUATION: &[&str] = &[", -'\""];
+        const PUNCTUATION: &[&str] = &[",-'\""];
         let language = rng.generate_range(1..=2);
         let mut references_count = 0;
         let words: Vec<String> = (0..rng.generate_range(3..=10))
             .map(|_| {
-                if previously_added_theses.is_empty() || rng.generate_range(0..=2) == 0 {
+                if previously_added_theses.is_empty() || rng.generate_range(0..=3) > 0 {
                     (0..rng.generate_range(2..=8))
                         .map(|_| {
                             if language == 1 {
@@ -71,7 +71,7 @@ mod tests {
                 } else {
                     references_count += 1;
                     format!(
-                        "@{}",
+                        "[{}]",
                         serde_json::to_value(
                             previously_added_theses
                                 .keys()
@@ -87,18 +87,20 @@ mod tests {
                 }
             })
             .collect();
-        let mut result = String::new();
+        let mut result_string = String::new();
         for (i, word) in words.iter().enumerate() {
-            result.push_str(word);
+            result_string.push_str(word);
             if i < words.len() - 1 {
                 if rng.generate_range(0..3) == 0 {
-                    result.push_str(PUNCTUATION[rng.generate_range(0..PUNCTUATION.len())]);
+                    result_string.push_str(PUNCTUATION[rng.generate_range(0..PUNCTUATION.len())]);
                 } else {
-                    result.push(' ');
+                    result_string.push(' ');
                 }
             }
         }
-        Text::new(&result, transaction_for_aliases_resolving).unwrap()
+        let result = Text::new(&result_string, transaction_for_aliases_resolving).unwrap();
+        assert_eq!(result.composed(), result_string);
+        result
     }
 
     fn random_tag(rng: &mut WyRand) -> Tag {

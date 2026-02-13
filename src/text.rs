@@ -34,6 +34,7 @@ pub struct Text {
     pub raw_text_parts: Vec<RawText>,
     #[serde(default)]
     pub references: Vec<ObjectId>,
+    pub start_with_reference: bool,
 }
 
 impl Text {
@@ -43,7 +44,7 @@ impl Text {
     ) -> Result<Self> {
         static REFERENCE_IN_TEXT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let reference_in_text_regex = REFERENCE_IN_TEXT_REGEX.get_or_init(|| {
-            Regex::new(r#"@(:?([A-Za-z0-9-_]{22})|(\S+))(:?\s|$)"#)
+            Regex::new(r#"\[(:?([A-Za-z0-9-_]{22})|([^\[\]]+))\]"#)
                 .with_context(|| "Can not compile regular expression to split text on raw text parts and references")
                 .unwrap()
         });
@@ -51,10 +52,14 @@ impl Text {
         let mut result = Self {
             raw_text_parts: Vec::new(),
             references: Vec::new(),
+            start_with_reference: false,
         };
         let mut last_match_end = 0;
         for reference_match in reference_in_text_regex.captures_iter(input) {
             let full_reference_match = reference_match.get(0).unwrap();
+            if full_reference_match.start() == 0 {
+                result.start_with_reference = true;
+            }
             let text_before = &input[last_match_end..full_reference_match.start()];
             if !text_before.is_empty() {
                 result.raw_text_parts.push(RawText(text_before.to_string()));
@@ -63,9 +68,10 @@ impl Text {
                 .get(1)
                 .map(|thesis_id_string_match| thesis_id_string_match.as_str())
             {
-                result
-                    .references
-                    .push(serde_json::from_str(&format!("\"{}\"", thesis_id_string))?);
+                result.references.push(
+                    serde_json::from_value(serde_json::Value::String(thesis_id_string.to_string()))
+                        .unwrap(),
+                );
             } else if let Some(alias_string) = reference_match
                 .get(2)
                 .map(|alias_string_match| alias_string_match.as_str())
@@ -83,10 +89,37 @@ impl Text {
                 result.raw_text_parts.push(RawText(remaining.to_string()));
             }
         }
-        result.references.sort();
-        result.references.dedup();
 
         Ok(result)
+    }
+
+    pub fn composed(&self) -> String {
+        let mut result_list = Vec::new();
+        if self.start_with_reference {
+            for (reference_index, reference) in self.references.iter().enumerate() {
+                result_list.push(format!(
+                    "[{}]",
+                    serde_json::to_value(reference).unwrap().as_str().unwrap()
+                ));
+                if reference_index < self.raw_text_parts.len() {
+                    result_list.push(self.raw_text_parts[reference_index].0.clone());
+                }
+            }
+        } else {
+            for (part_index, part) in self.raw_text_parts.iter().enumerate() {
+                result_list.push(part.0.clone());
+                if part_index < self.references.len() {
+                    result_list.push(format!(
+                        "[{}]",
+                        serde_json::to_value(&self.references[part_index])
+                            .unwrap()
+                            .as_str()
+                            .unwrap()
+                    ));
+                }
+            }
+        }
+        result_list.concat()
     }
 
     pub fn validated(&self) -> Result<&Self> {

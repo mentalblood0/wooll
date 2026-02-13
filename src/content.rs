@@ -13,8 +13,15 @@ pub enum Content {
 
 impl Content {
     pub fn id(&self) -> Result<ObjectId> {
+        let source = match self {
+            Content::Text(text) => text.composed().bytes().collect(),
+            Content::Relation(relation) => bincode::encode_to_vec(
+                relation,
+                bincode::config::standard()).with_context(|| format!("Can not binary encode Content {self:?} in order to compute it's ObjectId as it's binary representation hash")
+            )?
+        };
         Ok(ObjectId {
-            value: xxhash_rust::xxh3::xxh3_128(&bincode::encode_to_vec(self, bincode::config::standard()).with_context(|| format!("Can not binary encode Content {self:?} in order to compute it's ObjectId as it's binary representation hash"))?).to_be_bytes(),
+            value: xxhash_rust::xxh3::xxh3_128(&source).to_be_bytes(),
         })
     }
 

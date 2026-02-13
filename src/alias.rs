@@ -9,7 +9,7 @@ impl Alias {
     pub fn validated(&self) -> Result<&Self> {
         static ALIAS_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let sentence_regex = ALIAS_REGEX.get_or_init(|| {
-            Regex::new(r#"^\S+$"#)
+            Regex::new(r#"^[^\[\]]+$"#)
                 .with_context(|| "Can not compile regular expression for thesis alias validation")
                 .unwrap()
         });

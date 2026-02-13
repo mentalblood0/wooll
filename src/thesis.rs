@@ -38,6 +38,7 @@ impl Thesis {
             Content::Text(Text {
                 raw_text_parts: _,
                 ref references,
+                start_with_reference: _,
             }) => references.clone(),
             Content::Relation(Relation {
                 ref from,
