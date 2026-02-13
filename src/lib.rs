@@ -1,4 +1,5 @@
 pub mod alias;
+pub mod aliases_resolver;
 pub mod commands;
 pub mod content;
 pub mod read_transaction;
@@ -15,10 +16,13 @@ use trove::PathSegment;
 mod tests {
     use std::collections::BTreeMap;
 
+    use fallible_iterator::FallibleIterator;
     use nanorand::{Rng, WyRand};
     use pretty_assertions::assert_eq;
     use trove::ObjectId;
 
+    use crate::aliases_resolver::AliasesResolver;
+    use crate::commands::CommandsIterator;
     use crate::content::Content;
     use crate::read_transaction::ReadTransactionMethods;
     use crate::relation::Relation;
@@ -43,7 +47,7 @@ mod tests {
     fn random_text(
         rng: &mut WyRand,
         previously_added_theses: &BTreeMap<ObjectId, Thesis>,
-        transaction_for_aliases_resolving: &dyn ReadTransactionMethods,
+        aliases_resolver: &mut AliasesResolver,
     ) -> Text {
         const ENGLISH_LETTERS: [&str; 26] = [
             "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q",
@@ -98,7 +102,7 @@ mod tests {
                 }
             }
         }
-        let result = Text::new(&result_string, transaction_for_aliases_resolving).unwrap();
+        let result = Text::new(&result_string, aliases_resolver).unwrap();
         assert_eq!(result.composed(), result_string);
         result
     }
@@ -115,6 +119,7 @@ mod tests {
 
     fn random_thesis(
         rng: &mut WyRand,
+        aliases_resolver: &mut AliasesResolver,
         previously_added_theses: &BTreeMap<ObjectId, Thesis>,
         transaction: &WriteTransaction,
     ) -> Thesis {
@@ -127,7 +132,7 @@ mod tests {
                     rng.generate_range(1..=2)
                 };
                 match action_id {
-                    1 => Content::Text(random_text(rng, previously_added_theses, transaction)),
+                    1 => Content::Text(random_text(rng, previously_added_theses, aliases_resolver)),
                     2 => Content::Relation(Relation {
                         from: previously_added_theses
                             .keys()
@@ -172,27 +177,33 @@ mod tests {
                     } else {
                         rng.generate_range(1..=3)
                     };
+                    let mut aliases_resolver = AliasesResolver {
+                        read_able_transaction: transaction,
+                        known_aliases: BTreeMap::new(),
+                    };
                     match action_id {
                         1 => {
                             let thesis = {
-                                let mut result =
-                                    random_thesis(&mut rng, &previously_added_theses, &transaction);
-                                while previously_added_theses.contains_key(&result.id().unwrap()) {
+                                let mut result = random_thesis(
+                                    &mut rng,
+                                    &mut aliases_resolver,
+                                    &previously_added_theses,
+                                    &transaction,
+                                );
+                                while previously_added_theses.contains_key(&result.id()?) {
                                     result = random_thesis(
                                         &mut rng,
+                                        &mut aliases_resolver,
                                         &previously_added_theses,
                                         &transaction,
                                     );
                                 }
                                 result
                             };
-                            thesis.validated().unwrap();
-                            transaction.insert_thesis(thesis.clone()).unwrap();
-                            let thesis_id = thesis.id().unwrap();
-                            assert_eq!(
-                                transaction.get_thesis(&thesis_id).unwrap().unwrap(),
-                                thesis
-                            );
+                            thesis.validated()?;
+                            transaction.insert_thesis(thesis.clone())?;
+                            let thesis_id = thesis.id()?;
+                            assert_eq!(transaction.get_thesis(&thesis_id)?.unwrap(), thesis);
                             for referenced_thesis_id in thesis.references() {
                                 let where_referenced =
                                     transaction.where_referenced(&referenced_thesis_id)?;
@@ -207,13 +218,10 @@ mod tests {
                                 .nth(rng.generate_range(0..previously_added_theses.len()))
                                 .unwrap()
                                 .clone();
-                            transaction
-                                .tag_thesis(&thesis_to_tag_id, tag_to_add.clone())
-                                .unwrap();
+                            transaction.tag_thesis(&thesis_to_tag_id, tag_to_add.clone())?;
                             assert!(
                                 transaction
-                                    .get_thesis(&thesis_to_tag_id)
-                                    .unwrap()
+                                    .get_thesis(&thesis_to_tag_id)?
                                     .unwrap()
                                     .tags
                                     .contains(&tag_to_add)
@@ -235,13 +243,10 @@ mod tests {
                                     rng.generate_range(0..thesis_to_untag.tags.len());
                                 let tag_to_remove =
                                     thesis_to_untag.tags[tag_to_remove_index].clone();
-                                transaction
-                                    .untag_thesis(&thesis_to_untag_id, &tag_to_remove)
-                                    .unwrap();
+                                transaction.untag_thesis(&thesis_to_untag_id, &tag_to_remove)?;
                                 assert!(
                                     !transaction
-                                        .get_thesis(&thesis_to_untag_id)
-                                        .unwrap()
+                                        .get_thesis(&thesis_to_untag_id)?
                                         .unwrap()
                                         .tags
                                         .contains(&tag_to_remove)
@@ -257,8 +262,27 @@ mod tests {
                     }
                 }
                 for (thesis_id, thesis) in previously_added_theses.iter() {
-                    assert_eq!(transaction.get_thesis(thesis_id).unwrap().unwrap(), *thesis);
+                    assert_eq!(transaction.get_thesis(thesis_id)?.unwrap(), *thesis);
                 }
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_example() {
+        let mut sweater = new_default_sweater("test_example");
+        sweater
+            .lock_all_and_write(|transaction| {
+                let commands = CommandsIterator::new(
+                    &std::fs::read_to_string("src/example.txt")?,
+                    &transaction.sweater_config.supported_relations_kinds,
+                    &mut AliasesResolver {
+                        read_able_transaction: transaction,
+                        known_aliases: BTreeMap::new(),
+                    },
+                )
+                .collect::<Vec<_>>()?;
                 Ok(())
             })
             .unwrap();

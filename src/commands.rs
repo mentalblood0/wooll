@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use anyhow::{Context, Error, Result, anyhow};
 use fallible_iterator::FallibleIterator;
@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use trove::ObjectId;
 
 use crate::alias::Alias;
+use crate::aliases_resolver::AliasesResolver;
 use crate::content::Content;
-use crate::read_transaction::ReadTransactionMethods;
 use crate::relation::{Relation, RelationKind};
 use crate::tag::Tag;
 use crate::text::Text;
@@ -86,16 +86,15 @@ impl Command {
 
 pub struct CommandsIterator<'a> {
     supported_relations_kinds: &'a BTreeSet<RelationKind>,
-    transaction_for_aliases_resolving: Box<dyn ReadTransactionMethods>,
     paragraphs_iterator: Box<dyn FallibleIterator<Item = (usize, &'a str), Error = Error> + 'a>,
-    aliases: BTreeMap<Alias, ObjectId>,
+    aliases_resolver: &'a mut AliasesResolver<'a>,
 }
 
 impl<'a> CommandsIterator<'a> {
     pub fn new(
         input: &'a str,
         supported_relations_kinds: &'a BTreeSet<RelationKind>,
-        transaction_for_aliases_resolving: Box<dyn ReadTransactionMethods>,
+        aliases_resolver: &'a mut AliasesResolver<'a>,
     ) -> Self {
         static COMMANDS_SPLIT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let commands_split_regex = COMMANDS_SPLIT_REGEX.get_or_init(|| {
@@ -105,7 +104,7 @@ impl<'a> CommandsIterator<'a> {
         });
         Self {
             supported_relations_kinds,
-            transaction_for_aliases_resolving,
+            aliases_resolver: aliases_resolver,
             paragraphs_iterator: Box::new(fallible_iterator::convert(
                 commands_split_regex
                     .split(input)
@@ -114,32 +113,7 @@ impl<'a> CommandsIterator<'a> {
                     .enumerate()
                     .map(|index_and_paragraph| Ok(index_and_paragraph)),
             )),
-            aliases: BTreeMap::new(),
         }
-    }
-
-    fn get_thesis_id_by_reference(&self, reference: &Reference) -> Result<ObjectId> {
-        Ok(match reference {
-            Reference::ObjectId(thesis_id) => {
-                if self
-                    .transaction_for_aliases_resolving
-                    .get_thesis(thesis_id)?
-                    .is_none()
-                {
-                    return Err(anyhow!("Can not find thesis with id {thesis_id:?}"));
-                }
-                thesis_id.clone()
-            }
-            Reference::Alias(alias) => {
-                if let Some(result) = self.aliases.get(alias) {
-                    result.clone()
-                } else {
-                    self.transaction_for_aliases_resolving
-                        .get_thesis_id_by_alias(alias)?
-                        .ok_or_else(|| anyhow!("Can not find thesis id by alias {alias:?}"))?
-                }
-            }
-        })
     }
 }
 
@@ -153,14 +127,14 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
             static COMMAND_FIRST_LINE_REGEX: std::sync::OnceLock<Regex> =
                 std::sync::OnceLock::new();
             let command_first_line_regex = COMMAND_FIRST_LINE_REGEX.get_or_init(|| {
-                Regex::new(r#"^ *(\+|-|#|\^) +([^ ]+) *$"#)
+                Regex::new(r#"^ *(\+|-|#|\^)(:? +([^ ]+))? *$"#)
                     .with_context(|| "Can not compile regular expression for commands splitting")
                     .unwrap()
             });
             if let Some(captures) = command_first_line_regex.captures(lines[0]) {
                 let operation_char = captures[1].chars().next().unwrap();
                 let alias_option = captures
-                    .get(1)
+                    .get(3)
                     .map(|alias_match| Alias(alias_match.as_str().to_string()));
                 if let Some(ref alias) = alias_option {
                     alias.validated().with_context(|| {
@@ -177,12 +151,12 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
                         let add_text_thesis = AddThesis {
                             thesis: Thesis {
                                 alias: alias_option.clone(),
-                                content: Content::Text(Text::new(lines[1], &*self.transaction_for_aliases_resolving)?),
+                                content: Content::Text(Text::new(lines[1], self.aliases_resolver)?),
                                 tags: vec![]
                             }
                         };
                         if let Some(ref alias) = alias_option {
-                            self.aliases.insert(alias.clone(), add_text_thesis.thesis.id()?);
+                            self.aliases_resolver.remember(alias.clone(), add_text_thesis.thesis.id()?);
                         }
                         Command::AddThesis(add_text_thesis)
                     }
@@ -190,27 +164,24 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
                         let add_relation_thesis = AddThesis {
                             thesis: Thesis {
                                 alias: alias_option.clone(),
-                                content: Content::Relation(Relation { from: self.get_thesis_id_by_reference(&Reference::new(lines[1])?)?, kind: RelationKind(lines[2].to_string()), to: self.get_thesis_id_by_reference(&Reference::new(lines[3])?)? }),
+                                content: Content::Relation(Relation { from: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?).with_context(|| format!("Can not parse relation for AddThesis command on {}-th paragraph {:?}", paragraph_index + 1, paragraph))?, kind: RelationKind(lines[2].to_string()), to: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[3])?)? }),
                                 tags: vec![],
                             }
                         };
                         if let Some(ref alias) = alias_option {
-                            self.aliases.insert(
-                                alias.clone(),
-                                add_relation_thesis.thesis.id()?
-                            );
+                            self.aliases_resolver.remember(alias.clone(), add_relation_thesis.thesis.id()?);
                         }
                         Command::AddThesis(add_relation_thesis)
                     }
                     ('-', 2) => Command::RemoveThesis(RemoveThesis {
-                        thesis_id: self.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                        thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
                     }),
-                    ('#', 3) => Command::AddTag(AddTags {
-                        thesis_id: self.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                    ('#', 3..) => Command::AddTag(AddTags {
+                        thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
                         tags: lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
                     }),
-                    ('^', 3) => Command::RemoveTag(RemoveTags {
-                        thesis_id: self.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                    ('^', 3..) => Command::RemoveTag(RemoveTags {
+                        thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
                         tags: lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
                     }),
                     _ => {

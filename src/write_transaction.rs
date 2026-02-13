@@ -20,6 +20,10 @@ impl ReadTransactionMethods for WriteTransaction<'_, '_, '_, '_> {
     define_read_methods!();
 }
 
+impl<'a, 'b, 'c, 'd> ReadTransactionMethods for &mut WriteTransaction<'a, 'b, 'c, 'd> {
+    define_read_methods!();
+}
+
 impl WriteTransaction<'_, '_, '_, '_> {
     pub fn insert_thesis(&mut self, thesis: Thesis) -> Result<()> {
         let thesis_id = thesis.id()?;

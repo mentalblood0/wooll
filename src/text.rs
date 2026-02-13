@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use trove::ObjectId;
 
 use crate::alias::Alias;
-use crate::read_transaction::ReadTransactionMethods;
+use crate::aliases_resolver::AliasesResolver;
+use crate::commands::Reference;
 
 #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq)]
 pub struct RawText(pub String);
@@ -13,7 +14,7 @@ impl RawText {
     pub fn validated(&self) -> Result<&Self> {
         static RAW_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let sentence_regex = RAW_REGEX.get_or_init(|| {
-            Regex::new(r#"^[\p{Script=Cyrillic}\p{Script=Latin}\s,\-"']+$"#)
+            Regex::new(r#"^[0-9\p{Script=Cyrillic}\p{Script=Latin}\s,\-\:\."']+$"#)
                 .with_context(|| "Can not compile regular expression for text validation")
                 .unwrap()
         });
@@ -21,7 +22,7 @@ impl RawText {
             Ok(self)
         } else {
             Err(anyhow!(
-                "Text part around mentions must be one English or Russian sentence part: letters, whitespaces, ',', '-' and mentions using thesis id or alias prefixed with @, so {:?} does not seem to be text",
+                "Text part around mentions must be one English or Russian sentence part: letters, whitespaces, punctuation ,-:.'\" and references thesis id or alias put inside square brackets [], so {:?} does not seem to be text",
                 self.0
             ))
         }
@@ -38,10 +39,7 @@ pub struct Text {
 }
 
 impl Text {
-    pub fn new(
-        input: &str,
-        transaction_for_aliases_resolving: &dyn ReadTransactionMethods,
-    ) -> Result<Self> {
+    pub fn new(input: &str, aliases_resolver: &mut AliasesResolver) -> Result<Self> {
         static REFERENCE_IN_TEXT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
         let reference_in_text_regex = REFERENCE_IN_TEXT_REGEX.get_or_init(|| {
             Regex::new(r#"\[(:?([A-Za-z0-9-_]{22})|([^\[\]]+))\]"#)
@@ -65,7 +63,7 @@ impl Text {
                 result.raw_text_parts.push(RawText(text_before.to_string()));
             }
             if let Some(thesis_id_string) = reference_match
-                .get(1)
+                .get(2)
                 .map(|thesis_id_string_match| thesis_id_string_match.as_str())
             {
                 result.references.push(
@@ -73,12 +71,12 @@ impl Text {
                         .unwrap(),
                 );
             } else if let Some(alias_string) = reference_match
-                .get(2)
+                .get(3)
                 .map(|alias_string_match| alias_string_match.as_str())
             {
                 result.references.push(
-                    transaction_for_aliases_resolving
-                        .get_thesis_id_by_alias(&Alias(alias_string.to_string()))?.ok_or_else(|| anyhow!("Can not parse text {:?} with alias {:?} because do not know such alias", input, alias_string))?,
+                    aliases_resolver
+                        .get_thesis_id_by_reference(&Reference::Alias(Alias(alias_string.to_string()))).with_context(|| anyhow!("Can not parse text {:?} with alias {:?} because do not know such alias", input, alias_string))?,
                 );
             }
             last_match_end = full_reference_match.end();
