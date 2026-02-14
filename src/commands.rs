@@ -57,9 +57,9 @@ pub struct RemoveTags {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     AddThesis(AddThesis),
-    AddTag(AddTags),
+    AddTags(AddTags),
     RemoveThesis(RemoveThesis),
-    RemoveTag(RemoveTags),
+    RemoveTags(RemoveTags),
 }
 
 impl Command {
@@ -69,12 +69,12 @@ impl Command {
                 add_text_thesis.thesis.validated()?;
             }
             Command::RemoveThesis(_) => {}
-            Command::AddTag(add_tag) => {
+            Command::AddTags(add_tag) => {
                 for tag in add_tag.tags.iter() {
                     tag.validated()?;
                 }
             }
-            Command::RemoveTag(remove_tag) => {
+            Command::RemoveTags(remove_tag) => {
                 for tag in remove_tag.tags.iter() {
                     tag.validated()?;
                 }
@@ -176,11 +176,11 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
                     ('-', 2) => Command::RemoveThesis(RemoveThesis {
                         thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
                     }),
-                    ('#', 3..) => Command::AddTag(AddTags {
+                    ('#', 3..) => Command::AddTags(AddTags {
                         thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
                         tags: lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
                     }),
-                    ('^', 3..) => Command::RemoveTag(RemoveTags {
+                    ('^', 3..) => Command::RemoveTags(RemoveTags {
                         thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
                         tags: lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
                     }),
