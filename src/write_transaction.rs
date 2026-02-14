@@ -3,7 +3,7 @@ use fallible_iterator::FallibleIterator;
 use trove::{IndexRecordType, Object, ObjectId, path_segments};
 
 use crate::alias::Alias;
-use crate::commands::{AddTags, AddThesis, Command, RemoveTags, RemoveThesis};
+use crate::commands::Command;
 use crate::content::Content;
 use crate::define_read_methods;
 use crate::read_transaction::ReadTransactionMethods;
@@ -134,14 +134,14 @@ impl WriteTransaction<'_, '_, '_, '_> {
 
     pub fn execute_command(&mut self, command: &Command) -> Result<&Self> {
         match command {
-            Command::AddThesis(AddThesis { thesis }) => self.insert_thesis(thesis.clone())?,
-            Command::RemoveThesis(RemoveThesis { thesis_id }) => self.remove_thesis(thesis_id)?,
-            Command::AddTags(AddTags { thesis_id, tags }) => {
+            Command::AddThesis(thesis) => self.insert_thesis(thesis.clone())?,
+            Command::RemoveThesis(thesis_id) => self.remove_thesis(thesis_id)?,
+            Command::AddTags(thesis_id, tags) => {
                 for tag in tags {
                     self.tag_thesis(thesis_id, tag.clone())?;
                 }
             }
-            Command::RemoveTags(RemoveTags { thesis_id, tags }) => {
+            Command::RemoveTags(thesis_id, tags) => {
                 for tag in tags {
                     self.untag_thesis(thesis_id, tag)?;
                 }

@@ -33,49 +33,27 @@ impl Reference {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct AddThesis {
-    pub thesis: Thesis,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct RemoveThesis {
-    pub thesis_id: ObjectId,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct AddTags {
-    pub thesis_id: ObjectId,
-    pub tags: Vec<Tag>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct RemoveTags {
-    pub thesis_id: ObjectId,
-    pub tags: Vec<Tag>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    AddThesis(AddThesis),
-    AddTags(AddTags),
-    RemoveThesis(RemoveThesis),
-    RemoveTags(RemoveTags),
+    AddThesis(Thesis),
+    RemoveThesis(ObjectId),
+    AddTags(ObjectId, Vec<Tag>),
+    RemoveTags(ObjectId, Vec<Tag>),
 }
 
 impl Command {
     pub fn validated(&self) -> Result<&Self> {
         match self {
-            Command::AddThesis(add_text_thesis) => {
-                add_text_thesis.thesis.validated()?;
+            Command::AddThesis(thesis) => {
+                thesis.validated()?;
             }
             Command::RemoveThesis(_) => {}
-            Command::AddTags(add_tag) => {
-                for tag in add_tag.tags.iter() {
+            Command::AddTags(_, tags) => {
+                for tag in tags.iter() {
                     tag.validated()?;
                 }
             }
-            Command::RemoveTags(remove_tag) => {
-                for tag in remove_tag.tags.iter() {
+            Command::RemoveTags(_, tags) => {
+                for tag in tags.iter() {
                     tag.validated()?;
                 }
             }
@@ -148,42 +126,38 @@ impl<'a> FallibleIterator for CommandsIterator<'a> {
                 }
                 Ok(Some(match (operation_char, lines.len()) {
                     ('+', 2) => {
-                        let add_text_thesis = AddThesis {
-                            thesis: Thesis {
+                            let thesis = Thesis {
                                 alias: alias_option.clone(),
                                 content: Content::Text(Text::new(lines[1], self.aliases_resolver)?),
                                 tags: vec![]
-                            }
-                        };
+                            };
                         if let Some(ref alias) = alias_option {
-                            self.aliases_resolver.remember(alias.clone(), add_text_thesis.thesis.id()?);
+                            self.aliases_resolver.remember(alias.clone(), thesis.id()?);
                         }
-                        Command::AddThesis(add_text_thesis)
+                        Command::AddThesis(thesis)
                     }
                     ('+', 4) => {
-                        let add_relation_thesis = AddThesis {
-                            thesis: Thesis {
+                        let    thesis = Thesis {
                                 alias: alias_option.clone(),
                                 content: Content::Relation(Relation { from: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?).with_context(|| format!("Can not parse relation for AddThesis command on {}-th paragraph {:?}", paragraph_index + 1, paragraph))?, kind: RelationKind(lines[2].to_string()), to: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[3])?)? }),
                                 tags: vec![],
-                            }
                         };
                         if let Some(ref alias) = alias_option {
-                            self.aliases_resolver.remember(alias.clone(), add_relation_thesis.thesis.id()?);
+                            self.aliases_resolver.remember(alias.clone(), thesis.id()?);
                         }
-                        Command::AddThesis(add_relation_thesis)
+                        Command::AddThesis(thesis)
                     }
-                    ('-', 2) => Command::RemoveThesis(RemoveThesis {
-                        thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
-                    }),
-                    ('#', 3..) => Command::AddTags(AddTags {
-                        thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
-                        tags: lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
-                    }),
-                    ('^', 3..) => Command::RemoveTags(RemoveTags {
-                        thesis_id: self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
-                        tags: lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
-                    }),
+                    ('-', 2) => Command::RemoveThesis(
+                        self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                    ),
+                    ('#', 3..) => Command::AddTags(
+                        self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                         lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
+                    ),
+                    ('^', 3..) => Command::RemoveTags(
+                         self.aliases_resolver.get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                        lines[2..].iter().map(|tag_string|  Tag(tag_string.to_string())).collect(),
+                    ),
                     _ => {
                         return Err(anyhow!(
                             "Unsupported operation character and lines count combination ({:?}, {}) in first line {:?} of {}-th paragraph {:?}, supported combinations are ('+', 2) for adding text thesis, ('+', 4) for adding relation thesis, ('-', 2) for removing thesis, ('#', 3) for adding tag, ('^', 3) for removing tag",
