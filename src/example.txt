@@ -108,7 +108,7 @@ A1.1.1
 +
 (R-r).0_true_relatively
 therefore
-A1.1.1
+A1.1.2
 
 + R-r_false_absolutely
 Релятивизм абсолютно ложен

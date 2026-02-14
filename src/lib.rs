@@ -283,6 +283,9 @@ mod tests {
                     },
                 )
                 .collect::<Vec<_>>()?;
+                for command in commands {
+                    transaction.execute_command(&command)?;
+                }
                 Ok(())
             })
             .unwrap();
